@@ -1,2 +1,0 @@
-"I am on my way to passing the Cisco DEVASC exam" 
-I am beginning to understand Git! 
