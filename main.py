@@ -5,9 +5,8 @@ import time
 import datetime
 
 # API configuration
-
 gemini_api_url = "https://generativelanguage.googleapis.com/v1beta"
-gemini_api_key = "AIzaSyDwahtFFk8KunjI8gE9Oo21kEvVU25lotA"  # Your provided Gemini API key
+gemini_api_key = "AIzaSyDwahtFFk8KunjI8gE9Oo21kEvVU25lotA"  # Replace with your Gemini API key
 
 # OpenStreetMap APIs (for geocoding and directions) - free alternatives
 nominatim_url = "https://nominatim.openstreetmap.org/search"
@@ -130,7 +129,47 @@ def get_directions(origin_lat, origin_lng, dest_lat, dest_lng, mode, key=None):
         print(f"An error occurred: {str(e)}")
         return 500, {"code": "Error", "message": str(e)}
 
-def enhance_directions_with_gemini(origin, destination, mode, directions_data, key, model="gemini-pro"):
+def list_available_gemini_models(key):
+    """
+    List all available Gemini models for the given API key
+    
+    Args:
+        key (str): API key for Gemini
+        
+    Returns:
+        list: List of available model names
+    """
+    url = f"{gemini_api_url}/models"
+    headers = {
+        "x-goog-api-key": key
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            models_data = response.json()
+            available_models = []
+            if "models" in models_data:
+                for model in models_data["models"]:
+                    if "name" in model:
+                        model_name = model["name"].split("/")[-1]  # Extract just the model name
+                        # Check if model supports generateContent
+                        if "supportedGenerationMethods" in model and "generateContent" in model["supportedGenerationMethods"]:
+                            available_models.append(model_name)
+            return available_models
+        else:
+            print(f"Error listing models: {response.status_code}")
+            try:
+                error_data = response.json()
+                print(f"Error details: {json.dumps(error_data, indent=2)}")
+            except:
+                pass
+            return []
+    except Exception as e:
+        print(f"Exception listing models: {str(e)}")
+        return []
+
+def enhance_directions_with_gemini(origin, destination, mode, directions_data, key, model=None):
     """
     Enhance directions data with additional information using Gemini API
     
@@ -140,7 +179,7 @@ def enhance_directions_with_gemini(origin, destination, mode, directions_data, k
         mode (str): Mode of transportation
         directions_data (dict): Directions data from OSRM
         key (str): API key for Gemini
-        model (str): Gemini model to use
+        model (str): Gemini model to use (will be determined if None)
         
     Returns:
         str: Enhanced directions information
@@ -148,6 +187,30 @@ def enhance_directions_with_gemini(origin, destination, mode, directions_data, k
     # Extract basic directions information
     if directions_data.get("code") != "Ok" or "routes" not in directions_data or not directions_data["routes"]:
         return "Could not enhance directions - no valid directions data available."
+    
+    # First, list available models to determine which one to use
+    if model is None:
+        print("Checking for compatible Gemini models...")
+        available_models = list_available_gemini_models(key)
+        
+        # Try to find a suitable model
+        preferred_models = ["gemini-pro", "gemini-1.0-pro", "gemini-1.5-pro", "text-bison", "gemini-1.5-flash"]
+        selected_model = None
+        
+        for preferred in preferred_models:
+            if preferred in available_models:
+                selected_model = preferred
+                break
+                
+        if not selected_model and available_models:
+            # Use the first available model if none of the preferred ones are available
+            selected_model = available_models[0]
+            
+        if not selected_model:
+            return "No Gemini models available for your API key. Please check your API key or account permissions."
+            
+        model = selected_model
+        print(f"Using Gemini model: {model}")
     
     route = directions_data["routes"][0]
     
@@ -173,12 +236,13 @@ def enhance_directions_with_gemini(origin, destination, mode, directions_data, k
     Keep your response concise, focusing on interesting and helpful information.
     """
     
-    # Fixed URL construction for Gemini API
-    full_url = f"{gemini_api_url}/models/{model}:generateContent?key={key}"
+    # Construct URL based on the model name
+    full_url = f"{gemini_api_url}/models/{model}:generateContent"
     
-    # Prepare the headers
+    # Prepare the headers with API key
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": key  # Key should be in header, not in URL
     }
     
     # Prepare the request payload according to Gemini API specs
@@ -202,14 +266,27 @@ def enhance_directions_with_gemini(origin, destination, mode, directions_data, k
         # Send the request to Gemini API
         response = requests.post(full_url, headers=headers, json=data)
         
+        # Print details for debugging
+        print(f"Gemini API Status: {response.status_code}")
+        
         if response.status_code == 200:
             response_data = response.json()
             
             # Extract the generated text
             try:
-                response_text = response_data["candidates"][0]["content"]["parts"][0]["text"]
-                return response_text
-            except (KeyError, IndexError):
+                # Fixed the path to extract text from the response
+                candidates = response_data.get("candidates", [])
+                if candidates and len(candidates) > 0:
+                    content = candidates[0].get("content", {})
+                    parts = content.get("parts", [])
+                    if parts and len(parts) > 0:
+                        response_text = parts[0].get("text", "")
+                        return response_text
+                return "Could not extract enhancement text from Gemini response."
+            except (KeyError, IndexError) as e:
+                print(f"Error parsing Gemini response: {str(e)}")
+                # Print response for debugging
+                print(f"Response: {json.dumps(response_data, indent=2)}")
                 return "Could not extract enhancement text from Gemini response."
         else:
             # Try to get more detailed error information
@@ -218,12 +295,15 @@ def enhance_directions_with_gemini(origin, destination, mode, directions_data, k
                 error_data = response.json()
                 if "error" in error_data and "message" in error_data["error"]:
                     error_msg = error_data["error"]["message"]
+                # Print error response for debugging
+                print(f"Error response: {json.dumps(error_data, indent=2)}")
             except:
                 error_msg = f"Status code: {response.status_code}"
                 
             return f"Error enhancing directions with Gemini: {error_msg}"
             
     except Exception as e:
+        print(f"Error connecting to Gemini API: {str(e)}")
         return f"Error: {str(e)}"
 
 def display_directions(directions_data, origin, destination, mode, enhanced_info=None):
@@ -270,41 +350,41 @@ def display_directions(directions_data, origin, destination, mode, enhanced_info
     
     # Display turn-by-turn directions
     if "legs" in route and len(route["legs"]) > 0:
-        for leg in route["legs"]:
-            if "steps" in leg:
-                for step in leg["steps"]:
-                    # Extract maneuver and road name information
-                    maneuver = ""
-                    if "maneuver" in step:
-                        if "type" in step["maneuver"]:
-                            maneuver = step["maneuver"]["type"].capitalize()
-                        if "modifier" in step["maneuver"]:
-                            maneuver += " " + step["maneuver"]["modifier"]
-                    
-                    # Get road name if available
-                    road = ""
-                    if "name" in step and step["name"]:
-                        road = "onto " + step["name"]
-                    
-                    # Format the instruction
-                    instruction = maneuver
-                    if road:
-                        instruction += " " + road
-                    
-                    # If no maneuver info, provide basic guidance
-                    if not instruction or instruction.isspace():
-                        instruction = "Continue straight"
-                    
-                    # Format distance
-                    step_distance_m = step["distance"]
-                    step_distance_km = step_distance_m / 1000
-                    step_distance_mi = step_distance_km / 1.61
-                    
-                    print(f"{instruction} ( {step_distance_km:.1f} km / {step_distance_mi:.1f} miles )")
+        leg = route["legs"][0]  # Get the first leg
+        if "steps" in leg:
+            for i, step in enumerate(leg["steps"], 1):
+                # Extract maneuver and road name information
+                maneuver = ""
+                if "maneuver" in step:
+                    if "type" in step["maneuver"]:
+                        maneuver = step["maneuver"]["type"].capitalize()
+                    if "modifier" in step["maneuver"]:
+                        maneuver += " " + step["maneuver"]["modifier"]
+                
+                # Get road name if available
+                road = ""
+                if "name" in step and step["name"]:
+                    road = "onto " + step["name"]
+                
+                # Format the instruction
+                instruction = maneuver
+                if road:
+                    instruction += " " + road
+                
+                # If no maneuver info, provide basic guidance
+                if not instruction or instruction.isspace():
+                    instruction = "Continue straight"
+                
+                # Format distance
+                step_distance_m = step["distance"]
+                step_distance_km = step_distance_m / 1000
+                step_distance_mi = step_distance_km / 1.61
+                
+                print(f"{i}. {instruction} ({step_distance_km:.1f} km / {step_distance_mi:.1f} miles)")
     
     # If no steps found but there's a route geometry
     else:
-        print("Follow the route ( {:.1f} km / {:.1f} miles )".format(km, miles))
+        print(f"Follow the route ({km:.1f} km / {miles:.1f} miles)")
         print("Arrive at destination")
     
     print("=================================================")
@@ -319,6 +399,22 @@ def display_directions(directions_data, origin, destination, mode, enhanced_info
 def main():
     """Main function for the directions application"""
     
+    print("\n" + "=" * 50)
+    print("Welcome to the Enhanced Directions App!")
+    print("This app uses OpenStreetMap for directions and")
+    print("Google's Gemini AI to provide additional information.")
+    print("=" * 50 + "\n")
+    
+    # Check for available Gemini models at startup
+    print("Checking available Gemini models...")
+    available_models = list_available_gemini_models(gemini_api_key)
+    if available_models:
+        print(f"Found {len(available_models)} available models")
+    else:
+        print("Warning: No Gemini models found. AI enhancement may not be available.")
+        print("Please check your API key and ensure you have access to Gemini models.")
+    print("=" * 50 + "\n")
+    
     while True:
         # Display available transportation modes
         print("\n+++++++++++++++++++++++++++++++++++++++++++++")
@@ -332,16 +428,17 @@ def main():
         
         # Get transportation mode
         valid_modes = ["car", "bike", "foot", "driving", "bicycling", "walking"]
-        mode = input("Enter a transportation mode from the list above: ")
-        if mode == "quit" or mode == "q":
+        mode = input("Enter a transportation mode from the list above: ").lower()
+        if mode in ["quit", "q"]:
+            print("Thank you for using the Enhanced Directions App. Goodbye!")
             break
-        elif mode.lower() in valid_modes:
+        elif mode in valid_modes:
             # Map to OSRM profile naming if user enters Google-style modes
-            if mode.lower() == "driving":
+            if mode == "driving":
                 mode = "car"
-            elif mode.lower() == "bicycling":
+            elif mode == "bicycling":
                 mode = "bike"
-            elif mode.lower() == "walking":
+            elif mode == "walking":
                 mode = "foot"
         else:
             mode = "car"
@@ -349,22 +446,26 @@ def main():
         
         # Get origin location
         loc1 = input("Starting Location: ")
-        if loc1 == "quit" or loc1 == "q":
+        if loc1 in ["quit", "q"]:
+            print("Thank you for using the Enhanced Directions App. Goodbye!")
             break
         
         # Get origin coordinates
         orig = geocoding(loc1)
         if orig[1] == "null" or orig[2] == "null":
+            print("Could not find the starting location. Please try again.")
             continue  # If geocoding failed, restart the loop
         
         # Get destination location
         loc2 = input("Destination: ")
-        if loc2 == "quit" or loc2 == "q":
+        if loc2 in ["quit", "q"]:
+            print("Thank you for using the Enhanced Directions App. Goodbye!")
             break
         
         # Get destination coordinates
         dest = geocoding(loc2)
         if dest[1] == "null" or dest[2] == "null":
+            print("Could not find the destination. Please try again.")
             continue  # If geocoding failed, restart the loop
         
         print("=================================================")
@@ -378,13 +479,23 @@ def main():
             
             # If directions request was successful, display directions
             if directions_status == 200 and directions_data.get("code") == "Ok":
-                # Get enhanced information from Gemini
-                enhanced_info = enhance_directions_with_gemini(
-                    orig[3], dest[3], mode, directions_data, gemini_api_key
-                )
-                
-                # Display directions with enhanced information
-                display_directions(directions_data, orig[3], dest[3], mode, enhanced_info)
+                try:
+                    if available_models:
+                        # Get enhanced information from Gemini
+                        print("Fetching additional information from Gemini AI...")
+                        enhanced_info = enhance_directions_with_gemini(
+                            orig[3], dest[3], mode, directions_data, gemini_api_key
+                        )
+                        
+                        # Display directions with enhanced information
+                        display_directions(directions_data, orig[3], dest[3], mode, enhanced_info)
+                    else:
+                        print("Skipping AI enhancement - no available Gemini models")
+                        display_directions(directions_data, orig[3], dest[3], mode)
+                except Exception as e:
+                    print(f"Error while enhancing directions: {str(e)}")
+                    # Still display directions even if enhancement fails
+                    display_directions(directions_data, orig[3], dest[3], mode)
             else:
                 # Display error if directions request failed
                 print(f"Directions API Status: {directions_status}")
