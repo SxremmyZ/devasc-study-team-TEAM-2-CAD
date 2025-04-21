@@ -1,27 +1,29 @@
 # Enhanced Directions App
 
-A command-line application that provides enhanced directions using free mapping APIs and Google's Gemini AI.
+A command-line application that provides directions and travel information using free mapping APIs and enhances the experience with Google's Gemini AI.
 
-## 🌟 Features
+![App Demo](https://via.placeholder.com/800x400?text=Enhanced+Directions+App)
+
+## Features
 
 - **Free Mapping Services**: Uses OpenStreetMap's Nominatim for geocoding and OSRM for routing
 - **AI-Enhanced Directions**: Leverages Google's Gemini AI to provide additional information about your journey
 - **Multiple Transportation Modes**: Support for car, bike, and walking directions
 - **Detailed Turn-by-Turn Guidance**: Step-by-step directions with distance information
-- **Cross-platform**: Works on any system with Python 3.6+
+- **Robust Error Handling**: Gracefully handles API errors and connectivity issues
+- **Dynamic AI Model Selection**: Automatically selects the best available Gemini model
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Python 3.6 or higher
 - Internet connection
-- Google Gemini API key (for AI-enhanced directions)
+- Google Gemini API key
 
-## 🔧 Installation
+## Installation
 
 1. Clone this repository:
    ```
-   git clone ...
-   cd ...
+   not yet
    ```
 
 2. Install the required dependencies:
@@ -30,10 +32,13 @@ A command-line application that provides enhanced directions using free mapping 
    ```
 
 3. Set up your API key:
-   - Get a Google Gemini API key from https://makersuite.google.com/app/apikey
-   - Replace the placeholder API key in the code with your own key
+   - Get a Google Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Replace the placeholder API key in the code with your own key:
+     ```python
+     gemini_api_key = "YOUR_API_KEY_HERE"
+     ```
 
-## 🚀 Usage
+## Usage
 
 Run the application:
 ```
@@ -48,13 +53,17 @@ Follow the prompts to:
 
 To exit the application, type `q` or `quit` at any prompt.
 
-## 📝 Example
+## Example Output
 
 ```
 ===================================================
 Welcome to the Enhanced Directions App!
 This app uses OpenStreetMap for directions and
 Google's Gemini AI to provide additional information.
+===================================================
+
+Checking available Gemini models...
+Found 14 available models
 ===================================================
 
 +++++++++++++++++++++++++++++++++++++++++++++
@@ -108,7 +117,7 @@ Travel tips:
 =================================================
 ```
 
-## 🗺️ API Information
+## API Information
 
 This application uses:
 
@@ -125,23 +134,28 @@ This application uses:
 3. **Google Gemini API**
    - For AI-generated information about the journey
    - Requires an API key
+   - Automatically detects and uses available models
    - Documentation: https://ai.google.dev/docs
 
-## ⚠️ Limitations
+## Limitations
 
 - OSRM may not be able to calculate routes between very distant locations or across water bodies
 - The quality of AI-enhanced information depends on the Gemini API's knowledge about the locations
 - API rate limits may apply (the code implements proper delays to avoid hitting these limits)
+- Geocoding may not find all locations, especially in remote areas or with ambiguous names
 
-## 🤝 Contributing
+## Troubleshooting
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- **No routes found**: Try locations that are closer together or within the same region
+- **Geocoding errors**: Make sure location names are specific and correctly spelled
+- **AI enhancement errors**: Verify your API key is valid and has access to Gemini models
+- **Slow response times**: The application respects API rate limits, which may cause some delays
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - OpenStreetMap contributors for the free mapping data
 - OSRM team for the routing engine
