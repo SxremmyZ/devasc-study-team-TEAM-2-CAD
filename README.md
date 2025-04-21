@@ -20,8 +20,8 @@ A command-line application that provides enhanced directions using free mapping 
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/enhanced-directions-app.git
-   cd enhanced-directions-app
+   git clone ...
+   cd ...
    ```
 
 2. Install the required dependencies:
